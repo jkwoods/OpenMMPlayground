@@ -1,19 +1,17 @@
 #!/usr/bin/env python
 
 import sys
-import Bio.PDB
+from simtk import openmm as omm
 import numpy as np
-import math
 
 #INPUT: 1. name of orig
 #	2. name of linear (-pdb)
 #	3. dist k
 
-#ang_kforce = float(sys.argv[2])
-dist_kforce = float(sys.argv[3])
-
-d = open("test.txt", "w+")
-#a = open("5col.angles", "w+")
+if __name__ == "__main__":
+    rcsbpdbfile = sys.argv[1]
+    linepdbfile = sys.argv[2]
+    dist_kforce = float(sys.argv[3])
 
 linear_serials = {} # dict of {res #: linear serial number for cb atom}
 for model in Bio.PDB.PDBParser().get_structure(sys.argv[2], sys.argv[2] + ".pdb"):
