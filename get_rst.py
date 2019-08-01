@@ -1,73 +1,87 @@
 #!/usr/bin/env python
 
 import sys
-from simtk import openmm as omm
+from itertools import combinations
 import numpy as np
+
+from simtk.openmm import app
+
+
+# TODO what units do we want?
 
 #INPUT: 1. name of orig
 #	2. name of linear (-pdb)
 #	3. dist k
-
-if __name__ == "__main__":
-    rcsbpdbfile = sys.argv[1]
-    linepdbfile = sys.argv[2]
-    dist_kforce = float(sys.argv[3])
-
-linear_serials = {} # dict of {res #: linear serial number for cb atom}
-for model in Bio.PDB.PDBParser().get_structure(sys.argv[2], sys.argv[2] + ".pdb"):
-    for chain in model:
-        for seqnum, res in enumerate(chain, start=1):
-            try:
-                cbatom = res['CB']
-                linear_serials.update({seqnum : cbatom.get_serial_number()})
-            except KeyError:
-                continue
-
-#print(linear_serials)
+_default_force = 3.
+_default_catom = "cb"
+# distance in sequence space
+_min_res_distance = 2
+_extra_force_count = 0
 
 
-for model in Bio.PDB.PDBParser().get_structure(sys.argv[1], sys.argv[1] + ".pdb"):
-    for chain in model :
-        
-        ## phi psi
-#        for res in chain[:-1]: #not the last one
-#            atom1 =
-#            atom2 =
-#            atom3 =
-#            atom4 =
-#            vector1 = atom1.get_vector()
-#            vector2 = atom2.get_vector()
-#            vector3 = atom3.get_vector()
-#            vector4 = atom4.get_vector()
-#            torsion = calc_dihedral(vector1, vector2, vector3, vector4)
-#            d.write("%i    %i    %i	%i	%.1f    %.1f\n" % (atom1.serial_number, atom2.serial_number, atom3.serial_number, atom4.serial_number, torsion, ang_kforce))
+# TODO not adequate for general case!
+is_protein = lambda res: res.name.lower() not in {"hoh","h2o","tip3"}
 
-	
-        ## CB distance
-        no_dupes = []
-        for seqnum1, res1 in enumerate(chain, start=1):
-            for seqnum2, res2 in enumerate(chain, start=1):
-                if res1 != res2:
-                    try:    
-                        atom1 = res1['N']
-                        atom2 = res2['N']
-                        distance = atom1 - atom2
-                        if not ((atom2, atom1) in no_dupes) or ((atom1, atom2) in no_dupes):
-#                            atom1_index = linear_serials.get(seqnum1) -1 #openmm indexs atoms at 0, pdb files index at 1
-#                            atom2_index = linear_serials.get(seqnum2) -1
+if __name__ == "__main__" or len(sys.argv) == 1:
+    # TODO use argparser
+    dist_kforce = _default_force
+    rcsb_pdbfile = "1ubq.pdb"
+    linear_pdbfile = "linear.pdb"
+    if len(sys.argv) > 1:
+        rcsb_pdbfile = sys.argv[1]
+        linear_pdbfile = sys.argv[2]
+        if len(sys.argv) == 4:
+            dist_kforce = float(sys.argv[3])
 
-#                            print("atom1="+str(atom1_index)+"	atom2="+str(atom2_index))
+    # NOTE always use the actual class name
+    #      to initialize data structures,
+    #      with {} this might be dict or set
+    # dict of {res #: (linear serial #, RCSB serial #)}
+    serials_map = dict()
+    rcsb_pdb = app.PDBFile(rcsb_pdbfile)
+    linear_pdb = app.PDBFile(linear_pdbfile)
 
+    # Because in case there are waters first, etc.
+    #  - we are assuming the linear_pdb is ONLY protein
+    #    AND every residue is present in the RCSB file
+    custom_residue_index = -1
+    for residue in linear_pdb.topology.residues():
+        custom_residue_index += 1
+        for atom in residue.atoms():
+            if atom.name.lower() == _default_catom:
+                serials_map.update(
+                    {(residue.name, custom_residue_index): [atom.index]}
+                )
 
-                            d.write("%i    %i    %.1f    %.1f\n" % (res1.id[1], res2.id[1], distance, dist_kforce))
-                            no_dupes.append((atom1, atom2))
+    custom_residue_index = -1
+    for residue in rcsb_pdb.topology.residues():
+        if is_protein(residue):
+            custom_residue_index += 1
+            for atom in residue.atoms():
+                if atom.name.lower() == _default_catom:
+                    try:
+                        serials_map[(residue.name, custom_residue_index)].append(atom.index)
                     except KeyError:
-                        #no CB atom (GLY)
-                       # d.write("%i    %i    %.1f    %.1f\n" % (res1.id[1], res2.id[1], 0.0, 0.0)) #this will be "exempted" in wrapper
-                        continue
+                        raise Exception("Mismatch detected between residue sequences")
 
-    break
+    rcsb_positions = rcsb_pdb.positions
+    linear_positions = linear_pdb.positions
 
+    restraints = ""
+    for (a1,i1), (a2,i2) in combinations(serials_map.items(), 2):
 
-#a.close()
-d.close()
+        # Skip if have 'close neighbors'
+        if a2[1] - a1[1] <= _min_res_distance:
+            continue
+
+        r1 = rcsb_positions[i1[1]]
+        r2 = rcsb_positions[i2[1]]
+        d  = np.linalg.norm(r2 - r1)
+
+        restraints += "{0:7d} {1:7d} {2:9.4f} {3:5.2f}\n".format(
+            i1[0], i2[0], d._value, dist_kforce
+        )
+
+    with open("restraints.txt", "w") as f:
+        f.write(restraints)
+
