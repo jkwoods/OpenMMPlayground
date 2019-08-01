@@ -28,7 +28,7 @@ if __name__ == "__main__":
     distance_restraints = CustomBondForce("k*(r-r0)^2")
     distance_restraints.addPerBondParameter("k")
     distance_restraints.addPerBondParameter("r0")
-    distance_restraints.addBond(10, 550, [0.5*unit.nanometer, 1000])
+    distance_restraints.addBond(10, 550, [0.5*unit.nanometer, 10000])
     system.addForce(distance_restraints)
 
     with open(system_file.format(mediumtag), "w") as f:
@@ -36,5 +36,5 @@ if __name__ == "__main__":
 
     setup_run_simulation(
         prmtop.topology, linear_pdb.positions,
-        system, integrator, platform, simpletag
+        system, platform, mediumtag
     )
