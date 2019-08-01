@@ -2,33 +2,39 @@
 
 import sys
 
-from simtk.openmm import app, XmlSerializer, LangevinIntegrator, Platform
 from simtk import unit
+from simtk.openmm import app, XmlSerializer, Platform, CustomBondForce
+
+from openmm_tools import setup_run_simulation
 
 if __name__ == "__main__":
 
-    prmtop = app.AmberPrmtopFile('input.prmtop')
-    # NOTE we already have the coords from linear_pdb
-    #inpcrd = app.AmberInpcrdFile('input.inpcrd')
-
-    system = prmtop.createSystem(nonbondedMethod=app.NoCutoff)
-    with open("system-noadds.xml", "w") as f:
-        f.write(XmlSerializer.serialize(system))
-
-    integrator = LangevinIntegrator(100*unit.kelvin, 1/unit.picosecond, 0.001*unit.picoseconds)
+    simpletag, mediumtag, complextag = "simple", "medium", "complex"
+    system_file      = "system-{}.xml"
 
     platform = Platform.getPlatformByName("OpenCL")
-    simulation = app.Simulation(prmtop.topology, system, integrator, platform)
-    simulation.context.setPositions(linear_pdb.positions)
-    simulation.minimizeEnergy()
+    prmtop = app.AmberPrmtopFile("input.prmtop")
+    linear_pdb = app.PDBFile("linear.pdb")
+    system = prmtop.createSystem(nonbondedMethod=app.NoCutoff)
 
-    simulation.reporters.append(app.StateDataReporter(
-        sys.stdout, 1000, separator=" | ", step=True,
-        time=True, potentialEnergy=True, kineticEnergy=True,
-        totalEnergy=True, temperature=True, speed=True
-    ))
+    with open(system_file.format(simpletag), "w") as f:
+        f.write(XmlSerializer.serialize(system))
 
-    simulation.reporters.append(app.PDBReporter("simulation.pdb", 10000))
-    simulation.step(50000)
+    setup_run_simulation(
+        prmtop.topology, linear_pdb.positions,
+        system, platform, simpletag
+    )
 
+    distance_restraints = CustomBondForce("k*(r-r0)^2")
+    distance_restraints.addPerBondParameter("k")
+    distance_restraints.addPerBondParameter("r0")
+    distance_restraints.addBond(10, 550, [0.5*unit.nanometer, 1000])
+    system.addForce(distance_restraints)
 
+    with open(system_file.format(mediumtag), "w") as f:
+        f.write(XmlSerializer.serialize(system))
+
+    setup_run_simulation(
+        prmtop.topology, linear_pdb.positions,
+        system, integrator, platform, simpletag
+    )
