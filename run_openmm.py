@@ -25,10 +25,10 @@ if __name__ == "__main__":
         system, platform, simpletag
     )
 
-    distance_restraints = CustomBondForce("k*(r-r0)^2")
+    distance_restraints = CustomBondForce("-k*(r-r0)^2")
     distance_restraints.addPerBondParameter("k")
     distance_restraints.addPerBondParameter("r0")
-    distance_restraints.addBond(10, 550, [0.5*unit.nanometer, 10000])
+    distance_restraints.addBond(10, 1050, [0.5*unit.nanometer, 100])
     system.addForce(distance_restraints)
 
     with open(system_file.format(mediumtag), "w") as f:

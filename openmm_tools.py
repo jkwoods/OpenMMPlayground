@@ -14,7 +14,7 @@ simulation_file  = "simulation-{}.pdb"
 def setup_run_simulation(topology, positions, system, platform, tag=""):
 
     integrator = LangevinIntegrator(
-        100*unit.kelvin, 1/unit.picosecond, 0.001*unit.picoseconds
+        100*unit.kelvin, 1/unit.picosecond, 0.002*unit.picoseconds
     )
 
     simulation = app.Simulation(
